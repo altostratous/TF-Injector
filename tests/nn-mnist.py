@@ -37,10 +37,9 @@ if(check == "train"):
 	model.save_weights('h5/nn-trained.h5')
 
 else:
+	model.load_weights('h5/nn-trained.h5')
 	test_loss, test_acc = model.evaluate(test_images,  test_labels, verbose=2)
 	print("Accuracy before faults:", test_acc)
-
-	model.load_weights('h5/nn-trained.h5')
 
 	tfi.inject(model=model, confFile="confFiles/sample.yaml")
 

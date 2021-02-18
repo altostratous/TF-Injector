@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import re
 
 import tensorflow as tf
 from struct import pack, unpack
@@ -8,8 +9,12 @@ from tensorflow.keras import Model, layers, datasets
 import random, math
 from src import config
 
+
 def inject(confFile="confFiles/sample.yaml", **kwargs):
-	fiConf = config.config(confFile)
+	if kwargs.get('fiConf'):
+		fiConf = kwargs.pop('fiConf')
+	else:
+		fiConf = config.config(confFile)
 	fiFunc = globals()[fiConf["Type"]]
 	return fiFunc(fiConf, **kwargs)
 
@@ -45,9 +50,22 @@ def bitflip(f, pos):
     f = unpack('f', f_)
     return f[0]
 
+
+def kernels(trainable_variables):
+	return [t for t in trainable_variables if 'kernel' in t.name]
+
+
+def convs(trainable_variables):
+	return [t for t in trainable_variables if 'conv' in t.name and 'kernel' in t.name]
+
 def mutate(fiConf, **kwargs):
 	model = kwargs["model"]
-	v = model.trainable_variables[fiConf["Artifact"]]
+	if isinstance(fiConf["Artifact"], int):
+		v = model.trainable_variables[fiConf["Artifact"]]
+	elif isinstance(fiConf['Artifact'], str):
+		v = random.choice(globals()[fiConf['Artifact']](model.trainable_variables))
+	else:
+		raise ValueError
 	num = v.shape.num_elements()
 	sz = fiConf["Amount"]
 	ind = random.sample(range(num), sz)
@@ -55,15 +73,19 @@ def mutate(fiConf, **kwargs):
 	v_ = tf.identity(v)
 	v_ = tf.keras.backend.flatten(v_)
 	v_ = tf.unstack(v_)
-	if(fiConf["Bit"]=='N'):
-		for item in ind:
-			val = v_[item]
+	regex = re.compile('(\d+)-(\d+)')
+
+	for item in ind:
+		val = v_[item]
+		if(fiConf["Bit"]=='N'):
 			pos = random.randint(0, 31)
-			val_ = bitflip(val, pos)
-			v_[item] = val_
-		v_ = tf.stack(v_)
-		v_ = tf.reshape(v_, elem_shape)
-		v.assign(v_)
+		else:
+			pos = random.randint(*map(int, regex.match(fiConf['Bit']).groups()))
+		val_ = bitflip(val, pos)
+		v_[item] = val_
+	v_ = tf.stack(v_)
+	v_ = tf.reshape(v_, elem_shape)
+	v.assign(v_)
 
 def shuffle(fiConf, **kwargs):
 	x_test = kwargs["x_test"]
